@@ -52,10 +52,15 @@ else
   echo -e "  ${G}✓${X} python3, curl, tar, zstd all present"
 fi
 
-# ensure boto3 + zstandard for snapshot work
-if ! python3 -c "import boto3, zstandard" 2>/dev/null; then
-  echo -e "  installing python deps (boto3 + zstandard)..."
-  python3 -m pip install --user boto3 zstandard 2>&1 | tail -3
+# ensure boto3 + zstandard + cryptography for snapshot work
+# macOS system python3 (Apple/Xcode) is PEP 668 externally-managed, so
+# we pass --break-system-packages — install still goes to ~/Library/Python,
+# never touching the system tree. Standard pattern for user-scoped scripts
+# on macOS Sonoma+ / Tahoe.
+if ! python3 -c "import boto3, zstandard, cryptography" 2>/dev/null; then
+  echo -e "  installing python deps (boto3 + zstandard + cryptography)..."
+  python3 -m pip install --user --break-system-packages \
+    boto3 zstandard cryptography 2>&1 | tail -5
 fi
 echo -e "  ${G}✓${X} python deps ready"
 
@@ -116,7 +121,7 @@ else
 fi
 # Install cryptography for AES-GCM
 python3 -c "from cryptography.hazmat.primitives.ciphers.aead import AESGCM" 2>/dev/null \
-  || python3 -m pip install --user cryptography 2>&1 | tail -3
+  || python3 -m pip install --user --break-system-packages cryptography 2>&1 | tail -3
 
 # ---------- 3. download latest snapshot ----------
 echo
