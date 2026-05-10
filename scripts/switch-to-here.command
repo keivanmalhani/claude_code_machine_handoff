@@ -170,13 +170,29 @@ s3.download_file(os.environ['R2_BUCKET'], "$LATEST_KEY", "$LOCAL_TARBALL")
 print("  ✓ downloaded")
 PY
 
+# Decrypt now (if .aes) so both preview and extract operate on the plain .tar.zst.
+DECRYPTED_TARBALL="$LOCAL_TARBALL"
+if [[ "$LATEST_KEY" == *.aes ]]; then
+  echo -e "  decrypting (AES-256-GCM) using key from $KEY_FILE..."
+  DECRYPTED_TARBALL="${LOCAL_TARBALL%.aes}"
+  python3 - <<PY
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+key = bytes.fromhex(open("$KEY_FILE").read().strip())
+blob = open("$LOCAL_TARBALL", "rb").read()
+nonce, ct = blob[:12], blob[12:]
+plaintext = AESGCM(key).decrypt(nonce, ct, None)
+open("$DECRYPTED_TARBALL", "wb").write(plaintext)
+print("  ✓ decrypted")
+PY
+fi
+
 # ---------- 4. preview + confirm ----------
 echo
 echo -e "${B}[4/5]${X} preview — what would be extracted to ${B}\$HOME${X}"
 EXTRACT_LIST="$PULL_DIR/$LATEST_NAME.list"
 python3 - <<PY > "$EXTRACT_LIST"
 import tarfile, zstandard
-with open("$LOCAL_TARBALL", "rb") as f:
+with open("$DECRYPTED_TARBALL", "rb") as f:
     dctx = zstandard.ZstdDecompressor()
     with dctx.stream_reader(f) as reader:
         with tarfile.open(fileobj=reader, mode="r|") as tar:
@@ -212,27 +228,9 @@ if [[ ! "$ans" =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-# ---------- 5. (decrypt if needed) + extract + mark active ----------
+# ---------- 5. extract + mark active ----------
 echo
 echo -e "${B}[5/5]${X} extracting + marking Mac as active machine"
-
-# If the snapshot key ended in .aes, it's AES-256-GCM encrypted. Decrypt first.
-DECRYPTED_TARBALL="$LOCAL_TARBALL"
-if [[ "$LATEST_KEY" == *.aes ]]; then
-  echo -e "  decrypting (AES-256-GCM) using key from $KEY_FILE..."
-  DECRYPTED_TARBALL="${LOCAL_TARBALL%.aes}"
-  python3 - <<PY
-import sys
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-key = bytes.fromhex(open("$KEY_FILE").read().strip())
-blob = open("$LOCAL_TARBALL", "rb").read()
-nonce, ct = blob[:12], blob[12:]
-plaintext = AESGCM(key).decrypt(nonce, ct, None)
-open("$DECRYPTED_TARBALL", "wb").write(plaintext)
-print("  ✓ decrypted")
-PY
-fi
-
 zstd -d "$DECRYPTED_TARBALL" -o "$DECRYPTED_TARBALL.tar" --force >/dev/null 2>&1
 tar -xf "$DECRYPTED_TARBALL.tar" -C "$HOME"
 rm -f "$DECRYPTED_TARBALL.tar"
