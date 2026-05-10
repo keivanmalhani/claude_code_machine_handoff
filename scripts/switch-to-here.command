@@ -154,20 +154,22 @@ awk -F/ '{print $1"/"$2}' "$EXTRACT_LIST" | sort -u | head -10 | sed 's/^/    /'
 TOTAL_FILES=$(wc -l < "$EXTRACT_LIST" | tr -d ' ')
 echo -e "  total files: $TOTAL_FILES"
 echo
-echo -e "  ${B}what gets touched (only these top-level paths inside \$HOME):${X}"
+echo -e "  ${B}what gets touched (only these paths inside \$HOME):${X}"
 echo -e "    dev/malbqz/                   site code"
 echo -e "    .local/share/autobot/         bot, dashboard, sync engine"
 echo -e "    .claude/memory/ + .claude/hooks/   persistent memory + hooks"
 echo -e "    notes/                        todo + brainstorm docs"
+echo -e "    Desktop/3d printing/          3D printing files (synced both ways)"
 echo
 echo -e "  ${G}what is EXPLICITLY preserved (NOT touched):${X}"
-echo -e "    Documents/                    Bambu Studio + 3D printing files"
-echo -e "    Desktop/, Pictures/           your normal Mac files"
-echo -e "    Library/Application Support/  Claude Desktop, Bambu Studio configs"
+echo -e "    Documents/                    Bambu Studio configs, Lightroom, etc"
+echo -e "    Pictures/, Movies/            your normal Mac files"
+echo -e "    Library/Application Support/  Claude Desktop, Bambu Studio app data"
+echo -e "    rest of Desktop/              anything outside Desktop/3d printing"
 echo -e "    everything else under \$HOME"
 echo
-echo -e "  ${Y}⚠ matching files in the touched paths above WILL be overwritten${X}"
-echo -e "  ${Y}  by the R2 snapshot. 3D printing + Claude Desktop data is safe.${X}"
+echo -e "  ${Y}⚠ files in the 5 touched paths above WILL be overwritten by the R2 snapshot.${X}"
+echo -e "  ${Y}  Bambu Studio app data + everything else stays untouched.${X}"
 read -r -p "  Proceed with extract? [y/N] " ans
 if [[ ! "$ans" =~ ^[Yy]$ ]]; then
   echo -e "  ${R}aborted by user.${X} The downloaded tarball is at:"
