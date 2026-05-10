@@ -1,0 +1,6 @@
+# Local-only data, never commit
+*.env
+*-credentials*
+__pycache__/
+*.pyc
+.DS_Store
