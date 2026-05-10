@@ -79,15 +79,44 @@ if [ ! -f "$CRED_FILE" ]; then
      && grep -q "^R2_ENDPOINT=" "$CRED_FILE.tmp"; then
     mv "$CRED_FILE.tmp" "$CRED_FILE"
     chmod 600 "$CRED_FILE"
-    echo -e "  ${G}✓${X} saved to $CRED_FILE (chmod 600)"
+    echo -e "  ${G}✓${X} R2 creds saved to $CRED_FILE (chmod 600)"
   else
     echo -e "  ${R}✗${X} pasted text missing required keys (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT)"
     rm -f "$CRED_FILE.tmp"
     exit 1
   fi
 else
-  echo -e "  ${G}✓${X} credentials already present at $CRED_FILE"
+  echo -e "  ${G}✓${X} R2 credentials already present at $CRED_FILE"
 fi
+
+# Snapshot encryption key (AES-256-GCM). Snapshots are encrypted client-side
+# before pushing to R2; without this key, Mac can't decrypt what Linux pushed.
+KEY_FILE="$VAULT_DIR/snapshot-encryption.key"
+if [ ! -f "$KEY_FILE" ]; then
+  echo
+  echo -e "  ${Y}snapshot encryption key needed${X} — paste it next (single 64-hex-char line)."
+  echo -e "  Linux has it at: ~/Documents/autobot-vault/accounts/snapshot-encryption.key"
+  echo -e "  ${D}cat that file → copy → paste here → Ctrl-D${X}"
+  echo
+  cat > "$KEY_FILE.tmp"
+  # Strip trailing newline, validate it's 64 hex chars
+  tr -d '\n' < "$KEY_FILE.tmp" > "$KEY_FILE.trimmed"
+  if [ "$(wc -c < "$KEY_FILE.trimmed")" -eq 64 ] && grep -qE '^[0-9a-fA-F]{64}$' "$KEY_FILE.trimmed"; then
+    mv "$KEY_FILE.trimmed" "$KEY_FILE"
+    chmod 600 "$KEY_FILE"
+    rm -f "$KEY_FILE.tmp"
+    echo -e "  ${G}✓${X} encryption key saved to $KEY_FILE (chmod 600)"
+  else
+    echo -e "  ${R}✗${X} encryption key must be exactly 64 hex characters"
+    rm -f "$KEY_FILE.tmp" "$KEY_FILE.trimmed"
+    exit 1
+  fi
+else
+  echo -e "  ${G}✓${X} encryption key already present"
+fi
+# Install cryptography for AES-GCM
+python3 -c "from cryptography.hazmat.primitives.ciphers.aead import AESGCM" 2>/dev/null \
+  || python3 -m pip install --user cryptography 2>&1 | tail -3
 
 # ---------- 3. download latest snapshot ----------
 echo
@@ -178,12 +207,31 @@ if [[ ! "$ans" =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-# ---------- 5. extract + mark active ----------
+# ---------- 5. (decrypt if needed) + extract + mark active ----------
 echo
 echo -e "${B}[5/5]${X} extracting + marking Mac as active machine"
-zstd -d "$LOCAL_TARBALL" -o "$LOCAL_TARBALL.tar" --force >/dev/null 2>&1
-tar -xf "$LOCAL_TARBALL.tar" -C "$HOME"
-rm -f "$LOCAL_TARBALL.tar"
+
+# If the snapshot key ended in .aes, it's AES-256-GCM encrypted. Decrypt first.
+DECRYPTED_TARBALL="$LOCAL_TARBALL"
+if [[ "$LATEST_KEY" == *.aes ]]; then
+  echo -e "  decrypting (AES-256-GCM) using key from $KEY_FILE..."
+  DECRYPTED_TARBALL="${LOCAL_TARBALL%.aes}"
+  python3 - <<PY
+import sys
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+key = bytes.fromhex(open("$KEY_FILE").read().strip())
+blob = open("$LOCAL_TARBALL", "rb").read()
+nonce, ct = blob[:12], blob[12:]
+plaintext = AESGCM(key).decrypt(nonce, ct, None)
+open("$DECRYPTED_TARBALL", "wb").write(plaintext)
+print("  ✓ decrypted")
+PY
+fi
+
+zstd -d "$DECRYPTED_TARBALL" -o "$DECRYPTED_TARBALL.tar" --force >/dev/null 2>&1
+tar -xf "$DECRYPTED_TARBALL.tar" -C "$HOME"
+rm -f "$DECRYPTED_TARBALL.tar"
+[ "$DECRYPTED_TARBALL" != "$LOCAL_TARBALL" ] && rm -f "$DECRYPTED_TARBALL"
 echo -e "  ${G}✓${X} extracted to \$HOME"
 
 python3 - <<PY
