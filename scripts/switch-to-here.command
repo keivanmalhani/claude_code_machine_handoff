@@ -154,8 +154,20 @@ awk -F/ '{print $1"/"$2}' "$EXTRACT_LIST" | sort -u | head -10 | sed 's/^/    /'
 TOTAL_FILES=$(wc -l < "$EXTRACT_LIST" | tr -d ' ')
 echo -e "  total files: $TOTAL_FILES"
 echo
-echo -e "  ${Y}⚠ extraction will OVERWRITE matching files in \$HOME.${X}"
-echo -e "  (We won't touch anything outside the archive.)"
+echo -e "  ${B}what gets touched (only these top-level paths inside \$HOME):${X}"
+echo -e "    dev/malbqz/                   site code"
+echo -e "    .local/share/autobot/         bot, dashboard, sync engine"
+echo -e "    .claude/memory/ + .claude/hooks/   persistent memory + hooks"
+echo -e "    notes/                        todo + brainstorm docs"
+echo
+echo -e "  ${G}what is EXPLICITLY preserved (NOT touched):${X}"
+echo -e "    Documents/                    Bambu Studio + 3D printing files"
+echo -e "    Desktop/, Pictures/           your normal Mac files"
+echo -e "    Library/Application Support/  Claude Desktop, Bambu Studio configs"
+echo -e "    everything else under \$HOME"
+echo
+echo -e "  ${Y}⚠ matching files in the touched paths above WILL be overwritten${X}"
+echo -e "  ${Y}  by the R2 snapshot. 3D printing + Claude Desktop data is safe.${X}"
 read -r -p "  Proceed with extract? [y/N] " ans
 if [[ ! "$ans" =~ ^[Yy]$ ]]; then
   echo -e "  ${R}aborted by user.${X} The downloaded tarball is at:"
